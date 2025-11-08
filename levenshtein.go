@@ -170,20 +170,25 @@ func getOptimalWorkerCount(numProducts int) int {
 // 2. Substring sampling for very long descriptions (optional)
 // 3. Two-row DP approach keeps memory usage at O(min(m,n))
 type LevenshteinEngine struct {
-	weights ComparisonWeights // Weights for combining name and description scores
+	weights      ComparisonWeights  // Weights for combining name and description scores
+	rabinKarpFilter *RabinKarpFilter // Optional pre-filter for fast rejection
 }
 
 // NewLevenshteinEngine creates a new instance of the Levenshtein algorithm engine
+// with Rabin-Karp pre-filtering enabled by default
 func NewLevenshteinEngine() *LevenshteinEngine {
 	return &LevenshteinEngine{
-		weights: DefaultWeights(),
+		weights:         DefaultWeights(),
+		rabinKarpFilter: NewRabinKarpFilter(5), // Enable Rabin-Karp pre-filtering
 	}
 }
 
 // NewLevenshteinEngineWithWeights creates an engine with custom weights
+// and Rabin-Karp pre-filtering enabled by default
 func NewLevenshteinEngineWithWeights(weights ComparisonWeights) *LevenshteinEngine {
 	return &LevenshteinEngine{
-		weights: weights,
+		weights:         weights,
+		rabinKarpFilter: NewRabinKarpFilter(5), // Enable Rabin-Karp pre-filtering
 	}
 }
 
@@ -192,8 +197,30 @@ func (e *LevenshteinEngine) GetName() string {
 	return "Levenshtein Distance"
 }
 
+// EnableRabinKarpFilter turns on Rabin-Karp pre-filtering for faster rejections
+func (e *LevenshteinEngine) EnableRabinKarpFilter() {
+	if e.rabinKarpFilter != nil {
+		e.rabinKarpFilter.Enable()
+	} else {
+		e.rabinKarpFilter = NewRabinKarpFilter(5)
+	}
+}
+
+// DisableRabinKarpFilter turns off Rabin-Karp pre-filtering
+func (e *LevenshteinEngine) DisableRabinKarpFilter() {
+	if e.rabinKarpFilter != nil {
+		e.rabinKarpFilter.Disable()
+	}
+}
+
+// IsRabinKarpEnabled returns whether Rabin-Karp pre-filtering is active
+func (e *LevenshteinEngine) IsRabinKarpEnabled() bool {
+	return e.rabinKarpFilter != nil && e.rabinKarpFilter.IsEnabled()
+}
+
 // Compare computes the Levenshtein distance and similarity between two products
 // Uses default weights (70% name, 30% description)
+// Uses Rabin-Karp pre-filtering to quickly reject obviously dissimilar pairs
 func (e *LevenshteinEngine) Compare(a, b Product) ComparisonResult {
 	return e.CompareWithWeights(a, b, e.weights)
 }
@@ -203,6 +230,28 @@ func (e *LevenshteinEngine) CompareWithWeights(a, b Product, weights ComparisonW
 	// Use cached normalized strings to avoid repeated ToLower/TrimSpace operations
 	nameA, descA := a.getNormalizedStrings()
 	nameB, descB := b.getNormalizedStrings()
+
+	// Fast rejection using Rabin-Karp pre-filter
+	// Only use for very high thresholds where we can confidently reject
+	// Use threshold 0.85 - only reject if Rabin-Karp says definitely not similar
+	// This avoids false negatives (missing true matches)
+	if e.rabinKarpFilter != nil && e.rabinKarpFilter.IsEnabled() && len(nameA) > 20 && len(nameB) > 20 {
+		// Quick name rejection: only for longer strings where rolling hash is reliable
+		if !e.rabinKarpFilter.QuickReject(nameA, nameB, 0.85) {
+			// Names are very different (high confidence), return low similarity
+			return ComparisonResult{
+				ProductA:              a,
+				ProductB:              b,
+				NameDistance:          len([]rune(nameA)) + len([]rune(nameB)), // Max distance
+				NameSimilarity:        0.0,
+				DescriptionDistance:   0,
+				DescriptionSimilarity: 0.0,
+				CombinedSimilarity:    0.0,
+				Distance:              0,
+				Similarity:            0.0,
+			}
+		}
+	}
 
 	// Compute name similarity
 	nameDistance := e.computeDistance(nameA, nameB)
