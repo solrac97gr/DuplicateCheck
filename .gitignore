@@ -27,3 +27,6 @@ DuplicateCheck
 *.swp
 *.swo
 *~
+
+# Claude
+.claude/

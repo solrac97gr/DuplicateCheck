@@ -8,6 +8,7 @@ A high-performance Go library for detecting duplicate or near-duplicate products
 ## 🎯 Purpose
 
 In ecommerce, duplicate product listings can:
+
 - Confuse customers and hurt user experience
 - Reduce conversion rates
 - Cause inventory management issues
