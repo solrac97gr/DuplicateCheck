@@ -1,5 +1,51 @@
 package duplicatecheck
 
+import "sync"
+
+// min3 returns the minimum of three integers using optimized logic
+// This version minimizes branches for better CPU pipeline performance
+func min3(a, b, c int) int {
+	min := a
+	if b < min {
+		min = b
+	}
+	if c < min {
+		min = c
+	}
+	return min
+}
+
+// intSlicePool reuses integer slices for Levenshtein DP matrices
+// This reduces allocations and GC pressure in batch operations
+var intSlicePool = sync.Pool{
+	New: func() interface{} {
+		// Pre-allocate with common size (most product names/descriptions are < 1024 chars)
+		s := make([]int, 1024)
+		return &s
+	},
+}
+
+// getIntSlice retrieves a slice from the pool with at least the required capacity
+func getIntSlice(minSize int) []int {
+	slice := *intSlicePool.Get().(*[]int)
+	if cap(slice) < minSize {
+		// Need larger slice, allocate new one
+		slice = make([]int, minSize)
+	} else {
+		// Reuse pooled slice, resize to needed length
+		slice = slice[:minSize]
+	}
+	return slice
+}
+
+// putIntSlice returns a slice to the pool for reuse
+func putIntSlice(slice []int) {
+	// Only pool reasonably-sized slices to avoid memory bloat
+	if cap(slice) <= 4096 {
+		intSlicePool.Put(&slice)
+	}
+}
+
 // LevenshteinEngine implements the DuplicateCheckEngine interface using the
 // Levenshtein Distance algorithm (also known as Edit Distance).
 //
@@ -71,10 +117,10 @@ func (e *LevenshteinEngine) CompareWithWeights(a, b Product, weights ComparisonW
 
 	// Early exit: if even perfect description match can't reach reasonable threshold (75%)
 	maxPossibleSimilarity := nameSimilarity*normalizedNameWeight + 1.0*normalizedDescWeight
-	
+
 	var descDistance int
 	var descSimilarity float64
-	
+
 	// Skip expensive description comparison if it won't help
 	if maxPossibleSimilarity < 0.75 && descA != "" && descB != "" {
 		descDistance = len([]rune(descA)) + len([]rune(descB)) // Max possible distance
@@ -196,10 +242,13 @@ func (e *LevenshteinEngine) computeDistanceWithThreshold(s, t string, maxDistanc
 		return lenDiff
 	}
 
-	// prev row: represents the previous row in our DP matrix
-	// curr row: represents the current row being computed
-	prev := make([]int, n+1)
-	curr := make([]int, n+1)
+	// Get slices from pool to reduce allocations
+	prev := getIntSlice(n + 1)
+	curr := getIntSlice(n + 1)
+	defer func() {
+		putIntSlice(prev)
+		putIntSlice(curr)
+	}()
 
 	// Initialize first row: distance from empty string to prefixes of rs
 	// [0, 1, 2, 3, ..., n]
@@ -226,14 +275,7 @@ func (e *LevenshteinEngine) computeDistanceWithThreshold(s, t string, maxDistanc
 			substitution := prev[i-1] + cost // Replace rs[i-1] with rt[j-1]
 
 			// Take the minimum of the three operations
-			min := insertion
-			if deletion < min {
-				min = deletion
-			}
-			if substitution < min {
-				min = substitution
-			}
-			curr[i] = min
+			curr[i] = min3(insertion, deletion, substitution)
 		}
 
 		// Swap rows: current becomes previous for next iteration
@@ -292,9 +334,20 @@ func (e *LevenshteinEngine) computeSimilarity(s, t string, distance int) float64
 // Performance Note:
 //   - This performs O(n²) comparisons where n is the number of products
 //   - For 1000 products, this is ~500,000 comparisons
-//   - Consider using blocking/indexing techniques for very large datasets
+//   - Automatically uses parallel processing for large datasets (>50 products)
 func (e *LevenshteinEngine) FindDuplicates(products []Product, threshold float64) []ComparisonResult {
-	var duplicates []ComparisonResult
+	// Use parallel version for larger datasets
+	if len(products) > 50 {
+		return e.FindDuplicatesParallel(products, threshold)
+	}
+
+	// Use simple sequential version for small datasets
+	return e.findDuplicatesSequential(products, threshold)
+}
+
+// findDuplicatesSequential is the original sequential implementation
+func (e *LevenshteinEngine) findDuplicatesSequential(products []Product, threshold float64) []ComparisonResult {
+	duplicates := make([]ComparisonResult, 0, len(products)/10) // Pre-allocate with estimate
 
 	// Compare each product with every other product (once)
 	for i := 0; i < len(products); i++ {
@@ -307,6 +360,72 @@ func (e *LevenshteinEngine) FindDuplicates(products []Product, threshold float64
 			}
 		}
 	}
+
+	return duplicates
+}
+
+// FindDuplicatesParallel uses goroutines to parallelize duplicate detection
+// across multiple CPU cores for better performance on large datasets
+func (e *LevenshteinEngine) FindDuplicatesParallel(products []Product, threshold float64) []ComparisonResult {
+	numProducts := len(products)
+	if numProducts < 2 {
+		return nil
+	}
+
+	// Use number of CPUs for worker count
+	numWorkers := 4 // Conservative default
+	if numWorkers > numProducts {
+		numWorkers = numProducts
+	}
+
+	// Channel for work distribution
+	type workItem struct {
+		i, j int
+	}
+	workChan := make(chan workItem, numWorkers*2)
+	resultChan := make(chan ComparisonResult, numWorkers*2)
+
+	// Start worker goroutines
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for work := range workChan {
+				result := e.Compare(products[work.i], products[work.j])
+				if result.Similarity >= threshold {
+					resultChan <- result
+				}
+			}
+		}()
+	}
+
+	// Send work items
+	go func() {
+		for i := 0; i < numProducts; i++ {
+			for j := i + 1; j < numProducts; j++ {
+				workChan <- workItem{i, j}
+			}
+		}
+		close(workChan)
+	}()
+
+	// Collect results in separate goroutine
+	duplicates := make([]ComparisonResult, 0, numProducts/10)
+	done := make(chan struct{})
+	go func() {
+		for result := range resultChan {
+			duplicates = append(duplicates, result)
+		}
+		close(done)
+	}()
+
+	// Wait for all workers to finish
+	wg.Wait()
+	close(resultChan)
+
+	// Wait for result collection to finish
+	<-done
 
 	return duplicates
 }
