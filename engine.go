@@ -1,4 +1,4 @@
-package main
+package duplicatecheck
 
 // Product represents an item in your ecommerce system
 type Product struct {

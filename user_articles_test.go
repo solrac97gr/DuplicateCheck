@@ -1,4 +1,4 @@
-package main
+package duplicatecheck
 
 import (
 	"fmt"
@@ -301,14 +301,14 @@ func generateArticleDescription(subject string, seed int) string {
 // TestUserArticleWithCustomWeights tests article comparison with different weighting strategies
 func TestUserArticleWithCustomWeights(t *testing.T) {
 	article1 := Product{
-		ID:   "ARTICLE_A",
-		Name: "Introduction to Docker Containers and Kubernetes",
+		ID:          "ARTICLE_A",
+		Name:        "Introduction to Docker Containers and Kubernetes",
 		Description: strings.Repeat("Docker revolutionizes application deployment by providing lightweight containerization. ", 20),
 	}
 
 	article2 := Product{
-		ID:   "ARTICLE_B",
-		Name: "Introduction to Docker Containers and Microservices", // Very similar title
+		ID:          "ARTICLE_B",
+		Name:        "Introduction to Docker Containers and Microservices",                                                     // Very similar title
 		Description: strings.Repeat("Kubernetes orchestrates container deployments at scale in production environments. ", 20), // Different content
 	}
 

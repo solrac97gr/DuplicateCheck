@@ -1,4 +1,4 @@
-package main
+package duplicatecheck
 
 import (
 	"hash/fnv"
@@ -15,25 +15,25 @@ type HybridEngine struct {
 	levenshteinEngine *LevenshteinEngine
 	lshIndex          *LSHIndex
 	numHashFunctions  int
-	numBands         int
-	shingleSize      int
+	numBands          int
+	shingleSize       int
 }
 
 // LSHIndex implements Locality Sensitive Hashing for fast similarity search
 type LSHIndex struct {
-	bands        []map[uint64][]string // Each band maps hash -> product IDs
-	numBands     int
-	rowsPerBand  int
-	products     map[string]Product    // Product ID -> Product
+	bands       []map[uint64][]string // Each band maps hash -> product IDs
+	numBands    int
+	rowsPerBand int
+	products    map[string]Product // Product ID -> Product
 }
 
 // NewHybridEngine creates a hybrid duplicate detection engine
 func NewHybridEngine() *HybridEngine {
 	return &HybridEngine{
 		levenshteinEngine: NewLevenshteinEngine(),
-		numHashFunctions:  100,  // Number of MinHash functions
-		numBands:         20,   // Number of LSH bands
-		shingleSize:      3,    // 3-gram shingles
+		numHashFunctions:  100, // Number of MinHash functions
+		numBands:          20,  // Number of LSH bands
+		shingleSize:       3,   // 3-gram shingles
 	}
 }
 
@@ -46,19 +46,19 @@ func (e *HybridEngine) GetName() string {
 // This is done once during initialization or when products change
 func (e *HybridEngine) BuildIndex(products []Product) {
 	rowsPerBand := e.numHashFunctions / e.numBands
-	
+
 	e.lshIndex = &LSHIndex{
 		bands:       make([]map[uint64][]string, e.numBands),
 		numBands:    e.numBands,
 		rowsPerBand: rowsPerBand,
 		products:    make(map[string]Product),
 	}
-	
+
 	// Initialize band maps
 	for i := 0; i < e.numBands; i++ {
 		e.lshIndex.bands[i] = make(map[uint64][]string)
 	}
-	
+
 	// Index each product
 	for _, product := range products {
 		e.indexProduct(product)
@@ -69,25 +69,25 @@ func (e *HybridEngine) BuildIndex(products []Product) {
 func (e *HybridEngine) indexProduct(product Product) {
 	// Store product
 	e.lshIndex.products[product.ID] = product
-	
+
 	// Generate combined text for hashing
 	text := strings.ToLower(product.Name + " " + product.Description)
-	
+
 	// Generate shingles (n-grams)
 	shingles := generateShingles(text, e.shingleSize)
-	
+
 	// Compute MinHash signature
 	signature := computeMinHashSignature(shingles, e.numHashFunctions)
-	
+
 	// Add to LSH bands
 	for bandIdx := 0; bandIdx < e.numBands; bandIdx++ {
 		// Hash this band's rows together
-		bandHash := hashBand(signature, bandIdx*e.lshIndex.rowsPerBand, 
+		bandHash := hashBand(signature, bandIdx*e.lshIndex.rowsPerBand,
 			(bandIdx+1)*e.lshIndex.rowsPerBand)
-		
+
 		// Add product ID to this band bucket
 		e.lshIndex.bands[bandIdx][bandHash] = append(
-			e.lshIndex.bands[bandIdx][bandHash], 
+			e.lshIndex.bands[bandIdx][bandHash],
 			product.ID,
 		)
 	}
@@ -111,43 +111,43 @@ func (e *HybridEngine) FindDuplicates(products []Product, threshold float64) []C
 		// Fallback to regular Levenshtein if index not built
 		return e.levenshteinEngine.FindDuplicates(products, threshold)
 	}
-	
+
 	var duplicates []ComparisonResult
 	checked := make(map[string]bool) // Track checked pairs to avoid duplicates
-	
+
 	// For each product, find candidates using LSH
 	for _, product := range products {
 		candidates := e.findCandidates(product)
-		
+
 		// Stage 3: Precise verification with Levenshtein
 		for _, candidateID := range candidates {
 			// Skip self-comparison
 			if candidateID == product.ID {
 				continue
 			}
-			
+
 			// Skip if already checked this pair
 			pairKey := makePairKey(product.ID, candidateID)
 			if checked[pairKey] {
 				continue
 			}
 			checked[pairKey] = true
-			
+
 			// Get candidate product
 			candidate, exists := e.lshIndex.products[candidateID]
 			if !exists {
 				continue
 			}
-			
+
 			// Precise comparison with Levenshtein
 			result := e.levenshteinEngine.Compare(product, candidate)
-			
+
 			if result.CombinedSimilarity >= threshold {
 				duplicates = append(duplicates, result)
 			}
 		}
 	}
-	
+
 	return duplicates
 }
 
@@ -157,26 +157,26 @@ func (e *HybridEngine) FindDuplicatesForOne(product Product, threshold float64) 
 	if e.lshIndex == nil {
 		return nil
 	}
-	
+
 	// Stage 1: Fast LSH filtering
 	candidates := e.findCandidates(product)
-	
+
 	var duplicates []ComparisonResult
-	
+
 	// Stage 2: Precise verification with Levenshtein (only on candidates)
 	for _, candidateID := range candidates {
 		candidate, exists := e.lshIndex.products[candidateID]
 		if !exists {
 			continue
 		}
-		
+
 		result := e.levenshteinEngine.Compare(product, candidate)
-		
+
 		if result.CombinedSimilarity >= threshold {
 			duplicates = append(duplicates, result)
 		}
 	}
-	
+
 	return duplicates
 }
 
@@ -185,21 +185,21 @@ func (e *HybridEngine) FindDuplicatesForOne(product Product, threshold float64) 
 func (e *HybridEngine) findCandidates(product Product) []string {
 	// Generate combined text
 	text := strings.ToLower(product.Name + " " + product.Description)
-	
+
 	// Generate shingles
 	shingles := generateShingles(text, e.shingleSize)
-	
+
 	// Compute MinHash signature
 	signature := computeMinHashSignature(shingles, e.numHashFunctions)
-	
+
 	// Find candidates by checking all bands
 	candidateSet := make(map[string]bool)
-	
+
 	for bandIdx := 0; bandIdx < e.numBands; bandIdx++ {
 		// Hash this band
-		bandHash := hashBand(signature, bandIdx*e.lshIndex.rowsPerBand, 
+		bandHash := hashBand(signature, bandIdx*e.lshIndex.rowsPerBand,
 			(bandIdx+1)*e.lshIndex.rowsPerBand)
-		
+
 		// Get all products in this bucket
 		if bucket, exists := e.lshIndex.bands[bandIdx][bandHash]; exists {
 			for _, productID := range bucket {
@@ -207,13 +207,13 @@ func (e *HybridEngine) findCandidates(product Product) []string {
 			}
 		}
 	}
-	
+
 	// Convert set to slice
 	candidates := make([]string, 0, len(candidateSet))
 	for id := range candidateSet {
 		candidates = append(candidates, id)
 	}
-	
+
 	return candidates
 }
 
@@ -221,31 +221,31 @@ func (e *HybridEngine) findCandidates(product Product) []string {
 func generateShingles(text string, n int) []string {
 	// Clean text: lowercase and split into tokens
 	tokens := strings.Fields(text)
-	
+
 	if len(tokens) < n {
 		return []string{text}
 	}
-	
+
 	shingles := make([]string, 0, len(tokens)-n+1)
-	
+
 	// Create word n-grams
 	for i := 0; i <= len(tokens)-n; i++ {
 		shingle := strings.Join(tokens[i:i+n], " ")
 		shingles = append(shingles, shingle)
 	}
-	
+
 	return shingles
 }
 
 // computeMinHashSignature computes MinHash signature for a set of shingles
 func computeMinHashSignature(shingles []string, numHashes int) []uint32 {
 	signature := make([]uint32, numHashes)
-	
+
 	// Initialize with max values
 	for i := range signature {
 		signature[i] = math.MaxUint32
 	}
-	
+
 	// For each shingle
 	for _, shingle := range shingles {
 		// Hash with different seeds
@@ -256,7 +256,7 @@ func computeMinHashSignature(shingles []string, numHashes int) []uint32 {
 			}
 		}
 	}
-	
+
 	return signature
 }
 
@@ -296,19 +296,19 @@ func (e *HybridEngine) GetIndexStats() map[string]interface{} {
 	if e.lshIndex == nil {
 		return map[string]interface{}{"indexed": false}
 	}
-	
+
 	stats := map[string]interface{}{
-		"indexed":       true,
+		"indexed":        true,
 		"total_products": len(e.lshIndex.products),
-		"num_bands":     e.numBands,
-		"rows_per_band": e.lshIndex.rowsPerBand,
+		"num_bands":      e.numBands,
+		"rows_per_band":  e.lshIndex.rowsPerBand,
 	}
-	
+
 	// Calculate average bucket size
 	totalBuckets := 0
 	totalProducts := 0
 	maxBucketSize := 0
-	
+
 	for _, band := range e.lshIndex.bands {
 		totalBuckets += len(band)
 		for _, bucket := range band {
@@ -319,13 +319,13 @@ func (e *HybridEngine) GetIndexStats() map[string]interface{} {
 			}
 		}
 	}
-	
+
 	if totalBuckets > 0 {
 		stats["avg_bucket_size"] = float64(totalProducts) / float64(totalBuckets)
 	}
 	stats["max_bucket_size"] = maxBucketSize
 	stats["total_buckets"] = totalBuckets
-	
+
 	return stats
 }
 
@@ -361,12 +361,12 @@ func (s *BlockingStrategy) GetBlockKey(product Product) string {
 // GroupByBlocks groups products by their block keys
 func (s *BlockingStrategy) GroupByBlocks(products []Product) map[string][]Product {
 	blocks := make(map[string][]Product)
-	
+
 	for _, product := range products {
 		key := s.GetBlockKey(product)
 		blocks[key] = append(blocks[key], product)
 	}
-	
+
 	return blocks
 }
 

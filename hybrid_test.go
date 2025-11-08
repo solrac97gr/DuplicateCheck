@@ -1,4 +1,4 @@
-package main
+package duplicatecheck
 
 import (
 	"fmt"
@@ -36,23 +36,23 @@ func TestHybridEngineIndexing(t *testing.T) {
 
 	products := []Product{
 		{
-			ID:   "P1",
-			Name: "Understanding Machine Learning",
+			ID:          "P1",
+			Name:        "Understanding Machine Learning",
 			Description: "A comprehensive guide to ML algorithms and their applications in modern data science.",
 		},
 		{
-			ID:   "P2",
-			Name: "Understanding Machine Learning",
+			ID:          "P2",
+			Name:        "Understanding Machine Learning",
 			Description: "A comprehensive guide to ML algorithms and their applications in modern data science.",
 		},
 		{
-			ID:   "P3",
-			Name: "Deep Learning Fundamentals",
+			ID:          "P3",
+			Name:        "Deep Learning Fundamentals",
 			Description: "Neural networks, backpropagation, and deep learning architectures explained clearly.",
 		},
 		{
-			ID:   "P4",
-			Name: "Introduction to Python",
+			ID:          "P4",
+			Name:        "Introduction to Python",
 			Description: "Learn Python programming from scratch with practical examples and exercises.",
 		},
 	}
@@ -77,8 +77,8 @@ func TestHybridEngineIndexing(t *testing.T) {
 
 	t.Run("Find candidates", func(t *testing.T) {
 		testProduct := Product{
-			ID:   "TEST",
-			Name: "Understanding Machine Learning",
+			ID:          "TEST",
+			Name:        "Understanding Machine Learning",
 			Description: "A comprehensive guide to ML algorithms and their applications in modern data science.",
 		}
 
@@ -249,8 +249,8 @@ func TestHybridScalability(t *testing.T) {
 	sizes := []int{100, 500, 1000, 2000}
 
 	newArticle := Product{
-		ID:   "NEW",
-		Name: "Understanding Machine Learning Algorithms",
+		ID:          "NEW",
+		Name:        "Understanding Machine Learning Algorithms",
 		Description: "A comprehensive guide to machine learning algorithms.",
 	}
 
