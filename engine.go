@@ -1,6 +1,9 @@
 package duplicatecheck
 
-import "strings"
+import (
+	"strings"
+	"sync"
+)
 
 // Product represents an item in your ecommerce system
 type Product struct {
@@ -11,6 +14,9 @@ type Product struct {
 	normalizedName string
 	normalizedDesc string
 	normalized     bool
+	// N-gram caching for repeated comparisons
+	ngramsCache map[int][][2]string // ngramsCache[n] = n-grams for this n value
+	ngramsMutex sync.RWMutex         // Protects ngramsCache
 }
 
 // getNormalizedStrings returns cached normalized (lowercase, trimmed) versions of Name and Description
@@ -22,6 +28,61 @@ func (p *Product) getNormalizedStrings() (name, desc string) {
 		p.normalized = true
 	}
 	return p.normalizedName, p.normalizedDesc
+}
+
+// GetNgrams returns cached n-grams for the product name
+// Generates and caches n-grams on first call, returns cached version on subsequent calls
+// n parameter specifies the n-gram size (e.g., 2 for bigrams, 3 for trigrams)
+func (p *Product) GetNgrams(n int) [][2]string {
+	if n < 1 {
+		return [][2]string{}
+	}
+
+	// Initialize cache if needed
+	if p.ngramsCache == nil {
+		p.ngramsMutex.Lock()
+		if p.ngramsCache == nil {
+			p.ngramsCache = make(map[int][][2]string)
+		}
+		p.ngramsMutex.Unlock()
+	}
+
+	// Check if already cached
+	p.ngramsMutex.RLock()
+	if cached, exists := p.ngramsCache[n]; exists {
+		p.ngramsMutex.RUnlock()
+		return cached
+	}
+	p.ngramsMutex.RUnlock()
+
+	// Generate n-grams
+	name, _ := p.getNormalizedStrings()
+	ngrams := generateNgrams(name, n)
+
+	// Cache result
+	p.ngramsMutex.Lock()
+	p.ngramsCache[n] = ngrams
+	p.ngramsMutex.Unlock()
+
+	return ngrams
+}
+
+// generateNgrams generates n-grams of size n from a string
+// Returns pairs of (ngram_string, position) for efficient comparison
+func generateNgrams(s string, n int) [][2]string {
+	if n < 1 || len(s) < n {
+		return [][2]string{}
+	}
+
+	ngrams := make([][2]string, 0, len(s)-n+1)
+	runes := []rune(s)
+
+	for i := 0; i <= len(runes)-n; i++ {
+		ngram := string(runes[i : i+n])
+		ngrams = append(ngrams, [2]string{ngram, string(rune(i))}) // Store ngram and position
+	}
+
+	return ngrams
 }
 
 // ComparisonResult contains the similarity metrics between two products

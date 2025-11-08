@@ -16,11 +16,13 @@ As of Phase 1 & 2 optimizations:
 
 ## ✅ Phase 3: Completed Optimizations
 
-### 2. Rabin-Karp Rolling Hash Pre-filtering ✅ **COMPLETED in v1.2.0**
+### Fully Completed (5 Optimizations)
+
+#### 1. Rabin-Karp Rolling Hash Pre-filtering ✅ **COMPLETED in v1.2.0**
 
 **Complexity:** Medium | **Expected Speedup:** 40-60% | **Priority:** Very High
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ **FULLY IMPLEMENTED**
 
 - Conservative filtering strategy (only applies to strings > 20 chars)
 - Zero false negatives guaranteed with 0.25 threshold safety margin
@@ -44,6 +46,119 @@ As of Phase 1 & 2 optimizations:
 - Memory: No regression detected
 - Accuracy: 100% (zero false negatives)
 - Test Pass Rate: 100% (80+ tests)
+
+---
+
+#### 2. Adaptive Worker Pool Sizing (#7) ✅ **COMPLETED**
+
+**Complexity:** Easy | **Expected Speedup:** 15-20%
+
+**Status:** ✅ **FULLY IMPLEMENTED**
+
+- Dynamic worker count based on dataset size and CPU count
+- Optimized pool sizing for small, medium, and large datasets
+- Found in: `levenshteinEngine.FindDuplicatesParallel()`
+
+---
+
+#### 3. Compile-time Optimizations (#11) ✅ **COMPLETED**
+
+**Complexity:** Easy | **Expected Speedup:** 5-10%
+
+**Status:** ✅ **FULLY IMPLEMENTED**
+
+- `//go:inline` directives on hot path functions (min3, computeDistance)
+- Better CPU pipeline utilization
+- Found in: `levenshtein.go` lines 72, 485
+
+---
+
+#### 4. Smart Threshold Adaptation (#5) ✅ **COMPLETED**
+
+**Complexity:** Easy | **Expected Speedup:** 15-25%
+
+**Status:** ✅ **IMPLEMENTED** (Reserved for future use)
+
+- Function: `adaptiveThreshold()` in levenshtein.go
+- Marked with `//nolint:unused` - available for advanced scenarios
+- Dynamically adjusts thresholds based on string length and characteristics
+- Ready to integrate into comparison pipeline when needed
+
+---
+
+#### 5. Phonetic Hashing - Soundex (#8) ✅ **COMPLETED**
+
+**Complexity:** Easy | **Expected Speedup:** 30-40% (for name-focused searches)
+
+**Status:** ✅ **FULLY IMPLEMENTED**
+
+- Soundex algorithm for phonetic matching
+- Files: `phonetic.go` (342 lines), `phonetic_test.go`
+- Handles brand name variations: iPhone/iFone, Samsung/Samsong, Lenovo/Lenova
+- Test coverage: 20+ test cases
+
+---
+
+### Partially Completed (2 Optimizations - Need Completion)
+
+#### 6. Bloom Filter for Fast Negative Checks (#4) ⚠️ **PARTIAL**
+
+**Complexity:** Medium | **Expected Speedup:** 25-35% | **Priority:** HIGH
+
+**Status:** ⚠️ **PARTIALLY IMPLEMENTED** - Blocking strategy only
+
+**What's Done:**
+
+- Blocking strategy in hybrid_test.go (testBlockingStrategy())
+- Concept validated in testing
+
+**What's Missing:**
+
+- ProductBloomFilter type NOT in main codebase
+- No bloom.BloomFilter integration
+- No n-gram-based Bloom filter for product matching
+- No fast rejection for large catalogs
+
+**Next Steps:**
+
+- Create `ProductBloomFilter` struct with:
+  - BloomFilter for product name n-grams
+  - MaybeMatch() method for fast probabilistic checks
+  - Configurable false positive rate (1-5%)
+- Integrate into LevenshteinEngine.CompareWithWeights()
+- Expected impact: 6-8 hours to complete
+
+---
+
+#### 7. Diagonal Band Optimization (Ukkonen's Algorithm) (#3) ⚠️ **PARTIAL**
+
+**Complexity:** Medium | **Expected Speedup:** 20-30% | **Priority:** HIGH
+
+**Status:** ⚠️ **PARTIALLY IMPLEMENTED** - Basic two-row DP only
+
+**What's Done:**
+
+- Two-row DP approach in `computeDistance()` reduces space to O(min(m,n))
+- Memory efficient for long descriptions
+- Found in: levenshtein.go lines 310-380
+
+**What's Missing:**
+
+- No diagonal banding algorithm
+- No Ukkonen's algorithm implementation
+- No Myers' bit-parallel algorithm
+- Still computes full O(m×n) cells (not skipping diagonal band)
+- No early termination when distance exceeds threshold
+
+**Next Steps:**
+
+- Implement Ukkonen's algorithm:
+  - Only compute cells within k-diagonal band
+  - Reduce from O(m×n) to O(k×min(m,n)) where k = maxDistance
+  - Better cache locality and memory efficiency
+- Add maxDistance parameter to early termination
+- Expected impact: 1-2 days to complete
+- Expected speedup: Additional 20-30%
 
 ---
 
@@ -861,23 +976,55 @@ Track these metrics for each optimization:
 ## 📈 Current Status Summary
 
 **Last Updated:** November 8, 2025
-**Current Version:** v1.2.0 - Phase 3 Complete (411x speedup achieved)
-**Total Optimizations Implemented:** 7 major optimizations
+**Current Version:** v1.2.0 - Phase 3 Mostly Complete (411x speedup achieved)
+**Fully Implemented:** 5 major optimizations
+**Partially Implemented:** 2 optimizations (need completion)
 **Target:** Phase 4 (500-1000x total speedup potential)
 
-### What's Been Implemented
+### Accurate Implementation Status
 
-| Phase | Optimization | Status | Impact |
-|-------|--------------|--------|--------|
-| 1-2 | Caching, pooling, parallelization | ✅ Complete | 411x speedup |
-| 3 | Rabin-Karp pre-filtering | ✅ Complete (v1.2.0) | 10-25% additional |
-| 3 | Soundex phonetic hashing | ✅ Complete | Name-focused searches |
-| 4 | SIMD vectorization | ⏳ Pending | 30-50% potential |
-| 4 | Diagonal band optimization | ⏳ Pending | 20-30% potential |
-| 4 | Bloom filters | ⏳ Pending | 25-35% potential |
+| # | Optimization | Status | Priority | Impact |
+|----|--------------|--------|----------|--------|
+| 1 | SIMD Vectorization | ❌ NOT DONE | HIGH | 30-50% |
+| 2 | Rabin-Karp Pre-filtering | ✅ COMPLETE (v1.2.0) | DONE | 10-25% |
+| 3 | Diagonal Band (Ukkonen) | ⚠️ PARTIAL (2-row DP only) | HIGH | 20-30% |
+| 4 | Bloom Filters | ⚠️ PARTIAL (blocking strategy) | HIGH | 25-35% |
+| 5 | Smart Threshold | ✅ COMPLETE (reserved) | DONE | 15-25% |
+| 6 | NUMA-aware Batch | ❌ NOT DONE | LOW | 10-20% |
+| 7 | Adaptive Workers | ✅ COMPLETE | DONE | 15-20% |
+| 8 | Phonetic Hashing | ✅ COMPLETE | DONE | 30-40% |
+| 9 | N-gram Caching | ❌ NOT DONE | MEDIUM | 10-15% |
+| 10 | Metric Trees (BK/VP) | ❌ NOT DONE | MEDIUM | 20-30% |
+| 11 | Compile-time Opts | ✅ COMPLETE | DONE | 5-10% |
+| 12 | Mmap I/O | ❌ NOT DONE | LOW | 20-40% |
+| 13 | GPU Acceleration | ❌ NOT DONE | LOW | 100-500x |
+| 14 | SimHash | ❌ NOT DONE | MEDIUM | 2-3x |
+| 15 | Arena Allocator | ❌ NOT DONE | LOW | 10-15% |
 
-### Recommended Next Step: **Option B - Diagonal Band Optimization**
+### Recommended Next Steps (Priority Order)
 
-**Why:** Best balance of effort (1-2 days) vs impact (20-30% speedup) that works well with all existing optimizations and benefits all use cases.
+#### IMMEDIATE (Complete Partial Implementations)
 
-**Alternative:** If prioritizing large catalogs, choose **Bloom Filters** for fast negative checks (6-8 hours, 25-35% gain).
+1. **Complete Bloom Filter Implementation (#4)** ⭐ **QUICK WIN**
+   - Time: 6-8 hours
+   - Speedup: 25-35%
+   - What's Missing: ProductBloomFilter type, n-gram integration
+   - Why First: Small effort, high impact, self-contained
+
+2. **Complete Diagonal Band Optimization (#3)** ⭐ **RECOMMENDED**
+   - Time: 1-2 days
+   - Speedup: 20-30%
+   - What's Missing: Ukkonen's algorithm, diagonal banding logic
+   - Why Next: Benefits all comparisons, proven algorithm
+
+#### SHORT TERM (Easiest New Optimizations)
+
+1. **Pre-computed N-gram Sets (#9)** - 2 hours, 10-15% gain
+2. **SimHash Probabilistic Similarity (#14)** - 4 hours, 2-3x filtering
+3. **Custom Arena Allocator (#15)** - 1 day, 10-15% gain
+
+#### LONG TERM (High Impact, High Effort)
+
+1. **SIMD/Vectorization (#1)** - 2-3 days, 30-50% gain
+2. **Metric Space Indexing (#10)** - 1 day, 20-30% gain
+3. **GPU Acceleration (#13)** - 2 weeks, 100-500x (batch)
