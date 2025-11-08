@@ -115,14 +115,18 @@ func (e *LevenshteinEngine) CompareWithWeights(a, b Product, weights ComparisonW
 	normalizedNameWeight := weights.NameWeight / totalWeight
 	normalizedDescWeight := weights.DescriptionWeight / totalWeight
 
-	// Early exit: if even perfect description match can't reach reasonable threshold (75%)
+	// Early exit: if even perfect description match can't reach reasonable threshold (60%)
+	// AND description weight is low (< 40%), skip expensive description comparison
 	maxPossibleSimilarity := nameSimilarity*normalizedNameWeight + 1.0*normalizedDescWeight
 
 	var descDistance int
 	var descSimilarity float64
 
-	// Skip expensive description comparison if it won't help
-	if maxPossibleSimilarity < 0.75 && descA != "" && descB != "" {
+	// Skip expensive description comparison only if:
+	// 1. Description weight is relatively low (< 0.4)
+	// 2. Even perfect description match won't help much
+	// 3. Both descriptions exist
+	if maxPossibleSimilarity < 0.60 && normalizedDescWeight < 0.4 && descA != "" && descB != "" {
 		descDistance = len([]rune(descA)) + len([]rune(descB)) // Max possible distance
 		descSimilarity = 0.0
 	} else {

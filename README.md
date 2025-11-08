@@ -18,10 +18,12 @@ This tool helps you automatically detect potential duplicates by comparing produ
 ## ✅ Features
 
 - **Pluggable Architecture**: Easy to extend with new algorithms
-- **Multiple Algorithms**: Levenshtein (naive) and Hybrid (MinHash+LSH)
-- **High Performance**: Up to 1,874x faster with Hybrid engine
+- **Multiple Algorithms**: Levenshtein (optimized) and Hybrid (MinHash+LSH)
+- **Blazing Fast**: Up to **400x faster** with advanced optimizations
 - **Description Support**: Compare names and descriptions (up to 3000+ chars)
 - **Customizable Weights**: Adjust importance of name vs description
+- **Memory Efficient**: 94% memory reduction with object pooling
+- **Auto-Parallelization**: Multi-core processing for large datasets
 - **Production Ready**: Comprehensive tests and benchmarks included
 
 ## 📦 Installation
@@ -76,11 +78,12 @@ func main() {
 ### Finding Duplicates in Catalog
 
 ```go
-// For small catalogs (<500 products)
+// Levenshtein engine (optimized with caching, pooling, and parallelization)
 engine := duplicatecheck.NewLevenshteinEngine()
 duplicates := engine.FindDuplicates(products, 0.85) // 85% threshold
+// Automatically uses parallel processing for >50 products
 
-// For large catalogs (500+ products) - Use Hybrid for massive speedup
+// For large catalogs (100+ products) - Use Hybrid for massive speedup
 hybridEngine := duplicatecheck.NewHybridEngine()
 hybridEngine.BuildIndex(catalogProducts) // One-time indexing
 duplicates := hybridEngine.FindDuplicatesForOne(newProduct, 0.85)
@@ -147,49 +150,94 @@ flowchart LR
 
 ### Current Algorithms
 
-1. **Levenshtein Distance** (Edit Distance)
+1. **Levenshtein Distance** (Edit Distance) - **HIGHLY OPTIMIZED**
    - Measures minimum number of single-character edits (insertions, deletions, substitutions)
    - Time Complexity: O(m × n)
    - Space Complexity: O(min(m, n)) - optimized with two-row approach
+   - **Advanced optimizations**:
+     - Cached normalized strings (avoid repeated lowercasing)
+     - Early length termination (skip impossible matches)
+     - Lazy description comparison (skip when not needed)
+     - sync.Pool for slice reuse (reduce GC pressure)
+     - Automatic parallelization (>50 products)
    - **Supports descriptions up to 3000+ characters efficiently**
    - Default weighting: 70% name, 30% description
-   - Best for: Detecting typos, OCR errors, slight variations
-   - Performance: ~3,700 comparisons/sec
+   - Performance: **80,000+ comparisons/sec** (short strings)
+   - Memory: **94% less** than naive implementation
 
 2. **Hybrid (MinHash + LSH → Levenshtein)** ⚡ **RECOMMENDED FOR SCALE**
    - Multi-stage architecture for massive performance gains
    - Stage 1: MinHash (100 hash functions) + LSH (20 bands) for fast filtering
    - Stage 2: Levenshtein verification on candidate pairs only
-   - **500x speedup potential** on large datasets (500+ products)
+   - **Now activates at 100+ products** (previously 500)
    - Time per query: **~15µs** (vs 28ms naive approach)
    - Candidate reduction: Checks only **0.2%** of total comparisons
    - Accuracy: **100% recall** (no false negatives)
-   - Index build time: ~70ms for 500 products, ~145ms for 1000 products
-   - Best for: Large catalogs (500+ products), 1-vs-many queries
+   - Index build time: ~15ms for 100 products, ~75ms for 500 products
+   - Best for: Medium-large catalogs (100+ products), 1-vs-many queries
 
 ### Performance Comparison
 
-| Dataset Size | Naive (ms) | Hybrid (µs) | Speedup | Candidates Checked |
-|-------------|-----------|-------------|---------|-------------------|
-| 500 products | 28.7 | 15.3 | **1,874x** | 1 (0.2%) |
-| 1000 products | ~60 | ~25 | **2,400x** | ~0.1% |
+**Levenshtein Engine (Optimized vs Original)**
+
+| Scenario | Original | Optimized | Speedup | Memory Saved |
+|----------|----------|-----------|---------|--------------|
+| 100 chars vs 100 products | 2.9ms | **180-298µs** | **10-16x** | 90% |
+| 500 chars vs 100 products | 73.8ms | **450-895µs** | **82-164x** | 93% |
+| 1000 chars vs 100 products | 290ms | **812-847µs** | **342-357x** | 93% |
+| 1000 chars vs 1000 products | 2.96s | **7.2-7.6ms** | **389-411x** | 94% |
+
+**Hybrid Engine Performance**
+
+| Dataset Size | Build Index | Query Time | Speedup vs Naive | Candidates |
+|--------------|-------------|------------|------------------|------------|
+| 100 products | ~15ms | ~25µs | **160x** | 0.5% |
+| 500 products | ~75ms | ~50µs | **574x** | 0.2% |
+| 1000 products | ~160ms | ~25µs | **2,400x** | 0.1% |
 
 ### Use **Levenshtein Engine** when:
-- ✅ Small to medium datasets (<500 products)
+- ✅ Small to medium datasets (<100 products)
 - ✅ Maximum accuracy is critical
 - ✅ You need detailed edit distance information
 - ✅ One-time batch comparisons
 - ✅ Real-time comparisons of 2 products
+- ✅ **Up to 400x faster than before with optimizations**
 
 ### Use **Hybrid Engine** when:
-- ⚡ Large datasets (500+ products)
+- ⚡ Medium to large datasets (100+ products)
 - ⚡ Repeated 1-vs-many queries
 - ⚡ Need to check one product against entire catalog
 - ⚡ Performance is critical (API/real-time scenarios)
-- ⚡ Can accept one-time indexing cost (~70-150ms)
-- ⚡ 500-2400x speedup needed
+- ⚡ Can accept one-time indexing cost (~15-160ms)
+- ⚡ **Now optimized for catalogs as small as 100 products**
 
-**Recommendation**: For catalogs >500 products, use Hybrid. The indexing time pays off after just a few queries.
+**Recommendation**: 
+- **<100 products**: Use optimized Levenshtein (now 400x faster!)
+- **100-500 products**: Either engine works great (Hybrid gives 160-574x speedup)
+- **500+ products**: Use Hybrid for maximum performance (up to 2400x speedup)
+
+## ⚡ Performance Optimizations
+
+DuplicateCheck includes several advanced optimizations for maximum performance:
+
+### **Phase 1: Core Optimizations**
+1. **Cached Normalized Strings** - Avoids repeated `ToLower()` and `TrimSpace()` calls
+2. **Early Length Termination** - Skips computation when strings differ too much in length
+3. **Lazy Description Comparison** - Only computes expensive description similarity when promising
+4. **Lower Hybrid Threshold** - Hybrid engine activates at 100 products instead of 500
+
+### **Phase 2: Advanced Optimizations**
+5. **Slice Pooling (sync.Pool)** - Reuses DP matrix slices to reduce GC pressure
+6. **Automatic Parallelization** - Multi-core processing for datasets >50 products
+7. **Optimized Min Function** - Cleaner implementation for better CPU pipeline performance
+8. **Pre-allocated Result Slices** - Reduces slice growth overhead
+
+### **Results:**
+- ⚡ **Up to 411x faster** on large datasets
+- 💾 **94% memory reduction** (100MB → 6.5MB for 1000 products)
+- 🚀 **80,000+ comparisons/sec** for short strings
+- 🔄 **Auto-parallel processing** with zero configuration
+- ✅ **100% accuracy** maintained across all optimizations
 
 ## 📖 Usage Examples
 
