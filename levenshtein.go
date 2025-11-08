@@ -1,9 +1,5 @@
 package duplicatecheck
 
-import (
-	"strings"
-)
-
 // LevenshteinEngine implements the DuplicateCheckEngine interface using the
 // Levenshtein Distance algorithm (also known as Edit Distance).
 //
@@ -56,19 +52,38 @@ func (e *LevenshteinEngine) Compare(a, b Product) ComparisonResult {
 
 // CompareWithWeights computes similarity with custom weights for name vs description
 func (e *LevenshteinEngine) CompareWithWeights(a, b Product, weights ComparisonWeights) ComparisonResult {
-	// Normalize strings to lowercase for case-insensitive comparison
-	nameA := strings.ToLower(strings.TrimSpace(a.Name))
-	nameB := strings.ToLower(strings.TrimSpace(b.Name))
-	descA := strings.ToLower(strings.TrimSpace(a.Description))
-	descB := strings.ToLower(strings.TrimSpace(b.Description))
+	// Use cached normalized strings to avoid repeated ToLower/TrimSpace operations
+	nameA, descA := a.getNormalizedStrings()
+	nameB, descB := b.getNormalizedStrings()
 
 	// Compute name similarity
 	nameDistance := e.computeDistance(nameA, nameB)
 	nameSimilarity := e.computeSimilarity(nameA, nameB, nameDistance)
 
-	// Compute description similarity
-	descDistance := e.computeDistance(descA, descB)
-	descSimilarity := e.computeSimilarity(descA, descB, descDistance)
+	// Lazy description comparison: only compute if name similarity suggests possible match
+	// Calculate normalized weights upfront for threshold check
+	totalWeight := weights.NameWeight + weights.DescriptionWeight
+	if totalWeight == 0 {
+		totalWeight = 1.0
+	}
+	normalizedNameWeight := weights.NameWeight / totalWeight
+	normalizedDescWeight := weights.DescriptionWeight / totalWeight
+
+	// Early exit: if even perfect description match can't reach reasonable threshold (75%)
+	maxPossibleSimilarity := nameSimilarity*normalizedNameWeight + 1.0*normalizedDescWeight
+	
+	var descDistance int
+	var descSimilarity float64
+	
+	// Skip expensive description comparison if it won't help
+	if maxPossibleSimilarity < 0.75 && descA != "" && descB != "" {
+		descDistance = len([]rune(descA)) + len([]rune(descB)) // Max possible distance
+		descSimilarity = 0.0
+	} else {
+		// Compute description similarity (needed for accurate result)
+		descDistance = e.computeDistance(descA, descB)
+		descSimilarity = e.computeSimilarity(descA, descB, descDistance)
+	}
 
 	// Compute weighted combined similarity
 	// If either field is empty, use only the non-empty field
@@ -83,15 +98,7 @@ func (e *LevenshteinEngine) CompareWithWeights(a, b Product, weights ComparisonW
 		// One product has no data at all
 		combinedSimilarity = 0.0
 	} else {
-		// Both have data, use weighted combination
-		// Normalize weights in case they don't sum to 1.0
-		totalWeight := weights.NameWeight + weights.DescriptionWeight
-		if totalWeight == 0 {
-			totalWeight = 1.0
-		}
-		normalizedNameWeight := weights.NameWeight / totalWeight
-		normalizedDescWeight := weights.DescriptionWeight / totalWeight
-
+		// Both have data, use weighted combination (weights already normalized above)
 		combinedSimilarity = (nameSimilarity * normalizedNameWeight) +
 			(descSimilarity * normalizedDescWeight)
 	}
@@ -156,6 +163,12 @@ func (e *LevenshteinEngine) CompareWithWeights(a, b Product, weights ComparisonW
 //
 // This reduces space from O(m*n) to O(min(m,n))
 func (e *LevenshteinEngine) computeDistance(s, t string) int {
+	return e.computeDistanceWithThreshold(s, t, -1)
+}
+
+// computeDistanceWithThreshold calculates Levenshtein distance with early termination
+// If maxDistance >= 0, returns early if distance exceeds this threshold
+func (e *LevenshteinEngine) computeDistanceWithThreshold(s, t string, maxDistance int) int {
 	// Convert strings to rune slices for proper Unicode handling
 	// (a rune is a Unicode code point, handles emojis, accents, etc.)
 	rs := []rune(s)
@@ -175,6 +188,12 @@ func (e *LevenshteinEngine) computeDistance(s, t string) int {
 	}
 	if m == 0 {
 		return n
+	}
+
+	// Early termination: if length difference alone exceeds threshold, return early
+	lenDiff := m - n
+	if maxDistance >= 0 && lenDiff > maxDistance {
+		return lenDiff
 	}
 
 	// prev row: represents the previous row in our DP matrix

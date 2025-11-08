@@ -80,8 +80,8 @@ func BenchmarkQuickMatrix(b *testing.B) {
 
 	fmt.Println("\n=== ENGINE USAGE ===")
 	fmt.Println()
-	fmt.Println("  • Configurations with <500 ads:  Levenshtein Engine (Naive)")
-	fmt.Println("  • Configurations with ≥500 ads:  Hybrid Engine (MinHash+LSH)")
+	fmt.Println("  • Configurations with <100 ads:  Levenshtein Engine (Naive)")
+	fmt.Println("  • Configurations with ≥100 ads:  Hybrid Engine (MinHash+LSH)")
 	fmt.Println()
 }
 
@@ -112,8 +112,8 @@ func runQuickBench(name string, textLen, numAds, iters int) QuickBenchResult {
 	var durations []time.Duration
 	var memStats runtime.MemStats
 
-	if numAds >= 500 {
-		// Hybrid engine
+	if numAds >= 100 {
+		// Hybrid engine - now kicks in at 100+ products instead of 500
 		engine := NewHybridEngine()
 		engine.BuildIndex(catalog)
 

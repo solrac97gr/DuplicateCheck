@@ -1,10 +1,27 @@
 package duplicatecheck
 
+import "strings"
+
 // Product represents an item in your ecommerce system
 type Product struct {
 	ID          string
 	Name        string
 	Description string // Product description up to 3000 characters
+	// Cached normalized versions (lazy initialization)
+	normalizedName string
+	normalizedDesc string
+	normalized     bool
+}
+
+// getNormalizedStrings returns cached normalized (lowercase, trimmed) versions of Name and Description
+// This avoids repeated string operations in batch comparisons
+func (p *Product) getNormalizedStrings() (name, desc string) {
+	if !p.normalized {
+		p.normalizedName = strings.ToLower(strings.TrimSpace(p.Name))
+		p.normalizedDesc = strings.ToLower(strings.TrimSpace(p.Description))
+		p.normalized = true
+	}
+	return p.normalizedName, p.normalizedDesc
 }
 
 // ComparisonResult contains the similarity metrics between two products
