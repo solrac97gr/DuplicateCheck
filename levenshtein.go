@@ -64,6 +64,11 @@ func putIntSlice(slice []int) {
 // - Very short strings: stricter threshold (less room for variation)
 // - Very long strings: more lenient (allow more typos/edits)
 // - Mismatched lengths: higher threshold required
+//
+// NOTE: This function is available for future use and advanced filtering scenarios.
+// Currently, the main comparison logic uses fixed thresholds for consistency.
+//
+//nolint:unused
 //go:inline
 func adaptiveThreshold(baseThreshold float64, lenA, lenB int) float64 {
 	// Very short strings: require strict matching (many single typos matter)
@@ -519,6 +524,7 @@ func (e *LevenshteinEngine) FindDuplicatesParallel(products []Product, threshold
 	}()
 
 	// Collect results in separate goroutine
+	// Use pointer to slice so appends are visible outside the goroutine
 	duplicates := make([]ComparisonResult, 0, numProducts/10)
 	done := make(chan struct{})
 	go func() {

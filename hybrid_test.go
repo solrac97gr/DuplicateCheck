@@ -298,6 +298,7 @@ func BenchmarkHybridVsNaive(b *testing.B) {
 		engine := NewLevenshteinEngine()
 		b.ResetTimer()
 
+		var totalMatches int
 		for i := 0; i < b.N; i++ {
 			results := []ComparisonResult{}
 			for _, article := range articles {
@@ -306,7 +307,10 @@ func BenchmarkHybridVsNaive(b *testing.B) {
 					results = append(results, result)
 				}
 			}
+			totalMatches += len(results)
 		}
+		// Prevent compiler from optimizing away the benchmark loop
+		_ = totalMatches
 	})
 
 	b.Run("Hybrid_LSH_500", func(b *testing.B) {
