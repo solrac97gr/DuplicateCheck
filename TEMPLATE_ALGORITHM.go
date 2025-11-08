@@ -27,7 +27,7 @@ func (e *TemplateEngine) GetName() string {
 }
 
 // Compare computes the similarity between two products
-// 
+//
 // IMPLEMENTATION GUIDE:
 // =====================
 // 1. Extract product names and normalize them (lowercase, trim, etc.)
@@ -36,26 +36,27 @@ func (e *TemplateEngine) GetName() string {
 // 4. Return ComparisonResult with all metrics
 //
 // EXAMPLE STRUCTURE:
-//   nameA := strings.ToLower(a.Name)
-//   nameB := strings.ToLower(b.Name)
-//   
-//   distance := e.computeYourDistance(nameA, nameB)
-//   similarity := e.convertToSimilarity(distance, nameA, nameB)
-//   
-//   return ComparisonResult{
-//       ProductA:   a,
-//       ProductB:   b,
-//       Distance:   distance,
-//       Similarity: similarity,
-//   }
+//
+//	nameA := strings.ToLower(a.Name)
+//	nameB := strings.ToLower(b.Name)
+//
+//	distance := e.computeYourDistance(nameA, nameB)
+//	similarity := e.convertToSimilarity(distance, nameA, nameB)
+//
+//	return ComparisonResult{
+//	    ProductA:   a,
+//	    ProductB:   b,
+//	    Distance:   distance,
+//	    Similarity: similarity,
+//	}
 func (e *TemplateEngine) Compare(a, b Product) ComparisonResult {
 	// TODO: Implement your comparison logic here
-	
+
 	return ComparisonResult{
 		ProductA:   a,
 		ProductB:   b,
-		Distance:   0,    // Replace with actual distance
-		Similarity: 0.0,  // Replace with actual similarity
+		Distance:   0,   // Replace with actual distance
+		Similarity: 0.0, // Replace with actual similarity
 	}
 }
 
@@ -65,16 +66,16 @@ func (e *TemplateEngine) Compare(a, b Product) ComparisonResult {
 // =====================
 // The standard O(n²) approach works for most cases:
 //
-//   var duplicates []ComparisonResult
-//   for i := 0; i < len(products); i++ {
-//       for j := i + 1; j < len(products); j++ {
-//           result := e.Compare(products[i], products[j])
-//           if result.Similarity >= threshold {
-//               duplicates = append(duplicates, result)
-//           }
-//       }
-//   }
-//   return duplicates
+//	var duplicates []ComparisonResult
+//	for i := 0; i < len(products); i++ {
+//	    for j := i + 1; j < len(products); j++ {
+//	        result := e.Compare(products[i], products[j])
+//	        if result.Similarity >= threshold {
+//	            duplicates = append(duplicates, result)
+//	        }
+//	    }
+//	}
+//	return duplicates
 //
 // For large datasets, consider optimizations:
 // - Blocking/bucketing (group by category, brand, price range first)
@@ -142,7 +143,7 @@ func TestTemplateDistance(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := engine.Compare(tt.productA, tt.productB)
 			if result.Similarity < tt.minSimilarity {
-				t.Errorf("Similarity = %.4f, want >= %.4f", 
+				t.Errorf("Similarity = %.4f, want >= %.4f",
 					result.Similarity, tt.minSimilarity)
 			}
 		})
