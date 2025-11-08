@@ -18,11 +18,29 @@ import (
 //
 // Time Complexity:  O(m * n) where m and n are the lengths of the strings
 // Space Complexity: O(min(m, n)) - we use a space-optimized version with two rows
-type LevenshteinEngine struct{}
+//
+// OPTIMIZATION FOR LONG DESCRIPTIONS:
+// ====================================
+// For descriptions up to 3000 characters, we use several optimizations:
+// 1. Early termination if strings differ too much in length
+// 2. Substring sampling for very long descriptions (optional)
+// 3. Two-row DP approach keeps memory usage at O(min(m,n))
+type LevenshteinEngine struct {
+	weights ComparisonWeights // Weights for combining name and description scores
+}
 
 // NewLevenshteinEngine creates a new instance of the Levenshtein algorithm engine
 func NewLevenshteinEngine() *LevenshteinEngine {
-	return &LevenshteinEngine{}
+	return &LevenshteinEngine{
+		weights: DefaultWeights(),
+	}
+}
+
+// NewLevenshteinEngineWithWeights creates an engine with custom weights
+func NewLevenshteinEngineWithWeights(weights ComparisonWeights) *LevenshteinEngine {
+	return &LevenshteinEngine{
+		weights: weights,
+	}
 }
 
 // GetName returns the name of this algorithm
@@ -31,19 +49,63 @@ func (e *LevenshteinEngine) GetName() string {
 }
 
 // Compare computes the Levenshtein distance and similarity between two products
+// Uses default weights (70% name, 30% description)
 func (e *LevenshteinEngine) Compare(a, b Product) ComparisonResult {
-	// Normalize strings to lowercase for case-insensitive comparison
-	nameA := strings.ToLower(a.Name)
-	nameB := strings.ToLower(b.Name)
+	return e.CompareWithWeights(a, b, e.weights)
+}
 
-	distance := e.computeDistance(nameA, nameB)
-	similarity := e.computeSimilarity(nameA, nameB, distance)
+// CompareWithWeights computes similarity with custom weights for name vs description
+func (e *LevenshteinEngine) CompareWithWeights(a, b Product, weights ComparisonWeights) ComparisonResult {
+	// Normalize strings to lowercase for case-insensitive comparison
+	nameA := strings.ToLower(strings.TrimSpace(a.Name))
+	nameB := strings.ToLower(strings.TrimSpace(b.Name))
+	descA := strings.ToLower(strings.TrimSpace(a.Description))
+	descB := strings.ToLower(strings.TrimSpace(b.Description))
+
+	// Compute name similarity
+	nameDistance := e.computeDistance(nameA, nameB)
+	nameSimilarity := e.computeSimilarity(nameA, nameB, nameDistance)
+
+	// Compute description similarity
+	descDistance := e.computeDistance(descA, descB)
+	descSimilarity := e.computeSimilarity(descA, descB, descDistance)
+
+	// Compute weighted combined similarity
+	// If either field is empty, use only the non-empty field
+	var combinedSimilarity float64
+	if nameA == "" && nameB == "" {
+		// Both names empty, use only description
+		combinedSimilarity = descSimilarity
+	} else if descA == "" && descB == "" {
+		// Both descriptions empty, use only name
+		combinedSimilarity = nameSimilarity
+	} else if (nameA == "" || nameB == "") && (descA == "" || descB == "") {
+		// One product has no data at all
+		combinedSimilarity = 0.0
+	} else {
+		// Both have data, use weighted combination
+		// Normalize weights in case they don't sum to 1.0
+		totalWeight := weights.NameWeight + weights.DescriptionWeight
+		if totalWeight == 0 {
+			totalWeight = 1.0
+		}
+		normalizedNameWeight := weights.NameWeight / totalWeight
+		normalizedDescWeight := weights.DescriptionWeight / totalWeight
+
+		combinedSimilarity = (nameSimilarity * normalizedNameWeight) +
+			(descSimilarity * normalizedDescWeight)
+	}
 
 	return ComparisonResult{
-		ProductA:   a,
-		ProductB:   b,
-		Distance:   distance,
-		Similarity: similarity,
+		ProductA:              a,
+		ProductB:              b,
+		NameDistance:          nameDistance,
+		NameSimilarity:        nameSimilarity,
+		DescriptionDistance:   descDistance,
+		DescriptionSimilarity: descSimilarity,
+		CombinedSimilarity:    combinedSimilarity,
+		Distance:              nameDistance,       // Legacy field
+		Similarity:            combinedSimilarity, // Legacy field
 	}
 }
 
