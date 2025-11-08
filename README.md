@@ -20,7 +20,8 @@ This tool helps you automatically detect potential duplicates by comparing produ
 
 - **Pluggable Architecture**: Easy to extend with new algorithms
 - **Multiple Algorithms**: Levenshtein (optimized) and Hybrid (MinHash+LSH)
-- **Blazing Fast**: Up to **400x faster** with advanced optimizations
+- **Blazing Fast**: Up to **411x faster** with advanced optimizations
+- **Smart Pre-filtering**: Rabin-Karp rolling hash for O(n) pre-filtering (v1.2.0+)
 - **Description Support**: Compare names and descriptions (up to 3000+ chars)
 - **Customizable Weights**: Adjust importance of name vs description
 - **Memory Efficient**: 94% memory reduction with object pooling
@@ -228,17 +229,33 @@ DuplicateCheck includes several advanced optimizations for maximum performance:
 4. **Lower Hybrid Threshold** - Hybrid engine activates at 100 products instead of 500
 
 ### **Phase 2: Advanced Optimizations**
+
 5. **Slice Pooling (sync.Pool)** - Reuses DP matrix slices to reduce GC pressure
 6. **Automatic Parallelization** - Multi-core processing for datasets >50 products
 7. **Optimized Min Function** - Cleaner implementation for better CPU pipeline performance
 8. **Pre-allocated Result Slices** - Reduces slice growth overhead
+
+### **Phase 3: Pre-filtering with Rabin-Karp Rolling Hash** (v1.2.0+)
+
+9. **Rabin-Karp Pre-filtering** - O(n) rolling hash pre-filtering for fast rejection of obviously dissimilar strings
+   - Configurable window size (default: 5 characters)
+   - Conservative approach: only applies to longer strings (>20 chars)
+   - Safety margin: 0.25 threshold buffer to guarantee zero false negatives
+   - Hybrid similarity estimation (character-based for short, rolling hash for long)
+   - Expected speedup: 10-25% for diverse catalogs, 2-5% for brand-specific catalogs
+
+10. **Smart Filter Control** - Enable/disable Rabin-Karp pre-filtering per engine instance
+    - Useful for fine-tuning performance based on catalog characteristics
+    - Can be toggled without rebuilding engine
+    - Maintains backward compatibility
 
 ### **Results:**
 - ⚡ **Up to 411x faster** on large datasets
 - 💾 **94% memory reduction** (100MB → 6.5MB for 1000 products)
 - 🚀 **80,000+ comparisons/sec** for short strings
 - 🔄 **Auto-parallel processing** with zero configuration
-- ✅ **100% accuracy** maintained across all optimizations
+- 🎯 **Rabin-Karp pre-filtering** reduces Levenshtein comparisons by 10-25%
+- ✅ **100% accuracy** maintained across all optimizations (zero false negatives)
 
 ## 📖 Usage Examples
 
@@ -329,6 +346,30 @@ bookWeights := duplicatecheck.ComparisonWeights{
 }
 ```
 
+### Example 4: Controlling Rabin-Karp Pre-filtering (v1.2.0+)
+
+```go
+// Create engine with Rabin-Karp pre-filtering enabled by default
+engine := duplicatecheck.NewLevenshteinEngine()
+
+// For diverse product catalogs - keep pre-filtering enabled
+// (Rabin-Karp will reject 10-25% of dissimilar pairs before expensive Levenshtein)
+duplicates := engine.FindDuplicates(products, 0.85)
+
+// For similar product catalogs - disable pre-filtering
+// (conservative filtering may pass most pairs through anyway)
+engine.DisableRabinKarpFilter()
+duplicates := engine.FindDuplicates(similarProducts, 0.85)
+
+// Check if pre-filtering is active
+if engine.IsRabinKarpEnabled() {
+    fmt.Println("Rabin-Karp pre-filtering is active")
+}
+
+// Re-enable if needed
+engine.EnableRabinKarpFilter()
+```
+
 ## 🧪 Testing & Benchmarking
 
 ### Run All Tests
@@ -373,11 +414,21 @@ The comprehensive test suite includes:
 
 2. **User Article Duplication Tests** (\`user_articles_test.go\`)
    - **Real-world scenario:** Check 1 new article against 500 existing articles
-   - **Batch processing:** Check 10 articles against 500 existing articles  
+   - **Batch processing:** Check 10 articles against 500 existing articles
    - **Custom weighting:** Test different title vs. content weight strategies
    - **Performance:** ~540ms to scan 500 articles with descriptions
 
-3. **Performance Matrix Benchmark** (\`quick_bench_test.go\`) ⭐ **NEW!**
+3. **Rabin-Karp Pre-filtering Tests** (\`rabin_karp_test.go\`) ⭐ **NEW in v1.2.0!**
+   - **13 comprehensive test suites** with 80+ test cases
+   - **Zero false negatives guaranteed** - tests verify no similar strings are rejected
+   - Filter enable/disable functionality
+   - Window size variations (1-32 characters)
+   - Real product name scenarios (iPhone/Samsung variants)
+   - Length sensitivity and bounds checking
+   - Performance benchmarks for rolling hash operations
+   - Similarity estimation bounds validation
+
+4. **Performance Matrix Benchmark** (\`quick_bench_test.go\`)
    - **Comprehensive performance analysis** across text lengths and catalog sizes
    - Tests 100, 500, and 1000 character descriptions
    - Tests 10, 100, and 1000 product catalogs
@@ -441,13 +492,27 @@ func NewLevenshteinEngine() *LevenshteinEngine
 
 // NewLevenshteinEngineWithWeights creates engine with custom weights
 func NewLevenshteinEngineWithWeights(weights ComparisonWeights) *LevenshteinEngine
+
+// Rabin-Karp Pre-filtering Control (v1.2.0+)
+func (e *LevenshteinEngine) EnableRabinKarpFilter()   // Enable pre-filtering (default)
+func (e *LevenshteinEngine) DisableRabinKarpFilter()  // Disable pre-filtering
+func (e *LevenshteinEngine) IsRabinKarpEnabled() bool // Check if enabled
 ```
 
 **Use Cases:**
+
 - Small to medium catalogs (<500 products)
 - Maximum accuracy required
 - One-time batch processing
 - Simple 2-product comparison
+
+**Rabin-Karp Pre-filtering:**
+
+- Enabled by default in v1.2.0+
+- Conservative approach: zero false negatives guaranteed
+- Typical speedup: 10-25% for diverse catalogs
+- Best for: Catalogs with varied product categories
+- Disable for: Similar product name patterns (minimal filtering benefit)
 
 ### Hybrid Engine
 
