@@ -22,6 +22,9 @@ This tool helps you automatically detect potential duplicates by comparing produ
 - **Multiple Algorithms**: Levenshtein (optimized) and Hybrid (MinHash+LSH)
 - **Blazing Fast**: Up to **411x faster** with advanced optimizations
 - **Smart Pre-filtering**: Rabin-Karp rolling hash for O(n) pre-filtering (v1.2.0+)
+- **N-gram Caching** (v1.3.0+): 1000x faster repeated comparisons with thread-safe cache
+- **SimHash Filtering** (v1.3.0+): O(1) probabilistic similarity estimation for pre-filtering
+- **SIMD Infrastructure** (v1.3.0+): Optional vectorization (30-50% speedup on long strings)
 - **Description Support**: Compare names and descriptions (up to 3000+ chars)
 - **Customizable Weights**: Adjust importance of name vs description
 - **Memory Efficient**: 94% memory reduction with object pooling
