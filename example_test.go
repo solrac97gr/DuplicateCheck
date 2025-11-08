@@ -41,8 +41,8 @@ func Example_hybrid() {
 				"A15 Bionic chip, and 5G connectivity. Available in multiple colors.",
 		},
 		{
-			ID:   "2",
-			Name: "Samsung Galaxy S22",
+			ID:          "2",
+			Name:        "Samsung Galaxy S22",
 			Description: "Samsung Galaxy S22 with premium design and powerful performance.",
 		},
 	}
@@ -58,7 +58,7 @@ func Example_hybrid() {
 	}
 
 	_ = engine.FindDuplicatesForOne(newProduct, 0.75)
-	
+
 	// LSH is probabilistic, so results may vary
 	// For deterministic comparison, use LevenshteinEngine
 	fmt.Printf("Hybrid engine can find duplicates with O(1) candidate lookup\n")
@@ -94,14 +94,14 @@ func Example_customWeights() {
 func TestExampleIntegration(t *testing.T) {
 	t.Run("Levenshtein Engine", func(t *testing.T) {
 		engine := duplicatecheck.NewLevenshteinEngine()
-		
+
 		products := []duplicatecheck.Product{
 			{ID: "1", Name: "Test Product", Description: "Description"},
 			{ID: "2", Name: "Test Product", Description: "Description Similar"},
 		}
 
 		duplicates := engine.FindDuplicates(products, 0.80)
-		
+
 		if len(duplicates) == 0 {
 			t.Error("Expected to find duplicates")
 		}
@@ -109,7 +109,7 @@ func TestExampleIntegration(t *testing.T) {
 
 	t.Run("Hybrid Engine", func(t *testing.T) {
 		engine := duplicatecheck.NewHybridEngine()
-		
+
 		catalog := []duplicatecheck.Product{
 			{ID: "1", Name: "iPhone 13 Pro Max", Description: "128GB Blue"},
 			{ID: "2", Name: "Samsung S21", Description: "256GB"},
@@ -123,7 +123,7 @@ func TestExampleIntegration(t *testing.T) {
 		}
 
 		duplicates := engine.FindDuplicatesForOne(newProduct, 0.85)
-		
+
 		if len(duplicates) == 0 {
 			t.Error("Expected to find similar products")
 		}
@@ -136,12 +136,12 @@ func TestExampleIntegration(t *testing.T) {
 		}
 
 		engine := duplicatecheck.NewLevenshteinEngineWithWeights(weights)
-		
+
 		p1 := duplicatecheck.Product{ID: "1", Name: "A", Description: "Same"}
 		p2 := duplicatecheck.Product{ID: "2", Name: "B", Description: "Same"}
 
 		result := engine.Compare(p1, p2)
-		
+
 		if result.Similarity <= 0 {
 			t.Error("Expected similarity greater than 0")
 		}
@@ -150,7 +150,7 @@ func TestExampleIntegration(t *testing.T) {
 	t.Run("Interface Usage", func(t *testing.T) {
 		// Both engines implement DuplicateCheckEngine interface
 		var engine duplicatecheck.DuplicateCheckEngine
-		
+
 		// Use Levenshtein
 		engine = duplicatecheck.NewLevenshteinEngine()
 		if engine.GetName() != "Levenshtein Distance" {
