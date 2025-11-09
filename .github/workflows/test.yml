@@ -49,3 +49,49 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
+
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: test  # Only run benchmarks if tests pass
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'  # Use latest stable for benchmarks
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-benchmark-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-benchmark-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run Quick Performance Matrix
+        run: |
+          echo "🚀 Running Quick Performance Matrix..."
+          go test -bench=BenchmarkQuickMatrix -benchtime=1x -timeout=10m -benchmem | tee benchmark.txt
+          echo "✅ Benchmark completed"
+
+      - name: Run Key Benchmarks
+        run: |
+          echo "⚡ Running critical benchmarks..."
+          go test -bench="BenchmarkGetNgrams|BenchmarkHybridVsNaive" -benchmem -benchtime=3s | tee -a benchmark.txt
+          echo "✅ Critical benchmarks completed"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: benchmark.txt
+          retention-days: 30
