@@ -3,6 +3,7 @@ package duplicatecheck
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // Product represents an item in your ecommerce system
@@ -13,18 +14,18 @@ type Product struct {
 	// Cached normalized versions (lazy initialization)
 	normalizedName string
 	normalizedDesc string
-	normalized     bool
+	normalized     uint32 // atomic flag: 0 = not normalized, 1 = normalized
 	// N-gram caching for repeated comparisons
 	ngramsCache map[int][][2]string // ngramsCache[n] = n-grams for this n value
-	ngramsMutex sync.RWMutex         // Protects ngramsCache
+	ngramsMutex sync.RWMutex         // Protects ngramsCache and normalized strings
 }
 
 // getNormalizedStrings returns cached normalized (lowercase, trimmed) versions of Name and Description
 // This avoids repeated string operations in batch comparisons
-// Uses double-checked locking pattern for thread-safe lazy initialization
+// Uses double-checked locking pattern with atomic flag for thread-safe lazy initialization
 func (p *Product) getNormalizedStrings() (name, desc string) {
-	// Fast path: if already normalized, return immediately (no lock needed)
-	if p.normalized {
+	// Fast path: if already normalized, return immediately (atomic read, no lock needed)
+	if atomic.LoadUint32(&p.normalized) == 1 {
 		return p.normalizedName, p.normalizedDesc
 	}
 
@@ -33,10 +34,11 @@ func (p *Product) getNormalizedStrings() (name, desc string) {
 	defer p.ngramsMutex.Unlock()
 
 	// Double-check: another goroutine might have done the work while waiting for lock
-	if !p.normalized {
+	if p.normalized == 0 {
 		p.normalizedName = strings.ToLower(strings.TrimSpace(p.Name))
 		p.normalizedDesc = strings.ToLower(strings.TrimSpace(p.Description))
-		p.normalized = true
+		// Atomic store to ensure visibility across goroutines
+		atomic.StoreUint32(&p.normalized, 1)
 	}
 	return p.normalizedName, p.normalizedDesc
 }
