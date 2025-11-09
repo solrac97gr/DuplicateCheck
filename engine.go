@@ -21,7 +21,18 @@ type Product struct {
 
 // getNormalizedStrings returns cached normalized (lowercase, trimmed) versions of Name and Description
 // This avoids repeated string operations in batch comparisons
+// Uses double-checked locking pattern for thread-safe lazy initialization
 func (p *Product) getNormalizedStrings() (name, desc string) {
+	// Fast path: if already normalized, return immediately (no lock needed)
+	if p.normalized {
+		return p.normalizedName, p.normalizedDesc
+	}
+
+	// Slow path: need to normalize - acquire lock
+	p.ngramsMutex.Lock()
+	defer p.ngramsMutex.Unlock()
+
+	// Double-check: another goroutine might have done the work while waiting for lock
 	if !p.normalized {
 		p.normalizedName = strings.ToLower(strings.TrimSpace(p.Name))
 		p.normalizedDesc = strings.ToLower(strings.TrimSpace(p.Description))
@@ -33,37 +44,43 @@ func (p *Product) getNormalizedStrings() (name, desc string) {
 // GetNgrams returns cached n-grams for the product name
 // Generates and caches n-grams on first call, returns cached version on subsequent calls
 // n parameter specifies the n-gram size (e.g., 2 for bigrams, 3 for trigrams)
+// Thread-safe with double-checked locking pattern
 func (p *Product) GetNgrams(n int) [][2]string {
 	if n < 1 {
 		return [][2]string{}
 	}
 
-	// Initialize cache if needed
-	if p.ngramsCache == nil {
-		p.ngramsMutex.Lock()
-		if p.ngramsCache == nil {
-			p.ngramsCache = make(map[int][][2]string)
-		}
-		p.ngramsMutex.Unlock()
-	}
-
-	// Check if already cached
+	// Check if already cached (fast path - read-heavy, most calls hit this)
 	p.ngramsMutex.RLock()
-	if cached, exists := p.ngramsCache[n]; exists {
-		p.ngramsMutex.RUnlock()
-		return cached
+	if p.ngramsCache != nil {
+		if cached, exists := p.ngramsCache[n]; exists {
+			p.ngramsMutex.RUnlock()
+			return cached
+		}
 	}
 	p.ngramsMutex.RUnlock()
 
-	// Generate n-grams
+	// Slow path: need to generate and cache
+	// Generate n-grams (outside lock to minimize contention)
 	name, _ := p.getNormalizedStrings()
 	ngrams := generateNgrams(name, n)
 
-	// Cache result
+	// Store result with proper locking
 	p.ngramsMutex.Lock()
-	p.ngramsCache[n] = ngrams
-	p.ngramsMutex.Unlock()
+	defer p.ngramsMutex.Unlock()
 
+	// Ensure cache is initialized
+	if p.ngramsCache == nil {
+		p.ngramsCache = make(map[int][][2]string)
+	}
+
+	// Double-check: another goroutine might have already cached this n-gram size
+	if cached, exists := p.ngramsCache[n]; exists {
+		return cached
+	}
+
+	// Cache the result
+	p.ngramsCache[n] = ngrams
 	return ngrams
 }
 
